@@ -6,6 +6,8 @@ import AppKit
 
 final class SymbolPopup {
     var onClose: (() -> Void)?
+    /// Stays open even when the mouse is away (demo screenshot)
+    var keepOpen = false
 
     private let panel: KeyPanel
     private var buttons: [KeyButton] = []
@@ -76,7 +78,7 @@ final class SymbolPopup {
 
     private func checkMouse() {
         let mouse = NSEvent.mouseLocation
-        if panel.frame.contains(mouse) || anchorRect.contains(mouse) {
+        if keepOpen || panel.frame.contains(mouse) || anchorRect.contains(mouse) {
             lastNear = Date()
         } else if Date().timeIntervalSince(lastNear) > Self.closeAfter {
             close()

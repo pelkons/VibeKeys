@@ -19,16 +19,17 @@ import {SilenceWatcher} from './silence.js';
 // Linux evdev key codes (input-event-codes.h)
 const KEY = {ESC: 1, BACKSPACE: 14, ENTER: 28, LEFTCTRL: 29, Z: 44, LEFTSHIFT: 42, LEFTALT: 56, SYSRQ: 99, LEFTMETA: 125};
 
-// ---- Buttons, left to right ----
+// ---- Buttons, left to right. Icons are bundled (icons/vibekeys-<id>-symbolic.svg) so they look
+// the same whatever icon theme is installed. ----
 const BUTTONS = [
-    {id: 'mic', icon: 'audio-input-microphone-symbolic', kind: 'dictation'},
-    {id: 'confirm', icon: 'object-select-symbolic', keys: [KEY.LEFTCTRL, KEY.ENTER]},
-    {id: 'enter', icon: 'keyboard-enter-symbolic', keys: [KEY.ENTER]},
-    {id: 'newline', icon: 'format-justify-left-symbolic', keys: [KEY.LEFTSHIFT, KEY.ENTER]},
-    {id: 'undo', icon: 'edit-undo-symbolic', keys: [KEY.LEFTCTRL, KEY.Z]},
+    {id: 'mic', kind: 'dictation'},
+    {id: 'confirm', keys: [KEY.LEFTCTRL, KEY.ENTER]},
+    {id: 'enter', keys: [KEY.ENTER]},
+    {id: 'newline', keys: [KEY.LEFTSHIFT, KEY.ENTER]},
+    {id: 'undo', keys: [KEY.LEFTCTRL, KEY.Z]},
     {id: 'esc', text: 'Esc', keys: [KEY.ESC]},
-    {id: 'screenshot', icon: 'screenshot-ui-area-symbolic', fallback: 'camera-photo-symbolic', keys: [KEY.SYSRQ]},
-    {id: 'backspace', icon: 'edit-clear-symbolic', keys: [KEY.BACKSPACE], kind: 'backspace'},
+    {id: 'screenshot', keys: [KEY.SYSRQ]},
+    {id: 'backspace', keys: [KEY.BACKSPACE], kind: 'backspace'},
 ];
 
 // Hotkey that starts and stops OpenWhispr dictation; pick the one set in OpenWhispr.
@@ -326,7 +327,7 @@ class VibeKeys {
             style_class: 'vibekeys-grip', can_focus: false, reactive: true, button_mask: 0,
             style: keyStyle(18),
             child: new St.Icon({
-                icon_name: 'view-app-grid-symbolic', icon_size: Math.round(14 * s),
+                gicon: this._icon('grip'), icon_size: Math.round(14 * s),
                 x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER,
             }),
         });
@@ -342,11 +343,9 @@ class VibeKeys {
 
         for (const def of BUTTONS) {
             const align = {x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER};
-            const child = def.icon
-                ? new St.Icon({icon_name: def.icon, icon_size: Math.round(18 * s), ...align})
-                : new St.Label({text: def.text, ...align});
-            if (def.fallback)
-                child.fallback_icon_name = def.fallback;
+            const child = def.text
+                ? new St.Label({text: def.text, ...align})
+                : new St.Icon({gicon: this._icon(def.id), icon_size: Math.round(18 * s), ...align});
             const button = new St.Button({
                 style_class: 'vibekeys-key', can_focus: false, track_hover: true, reactive: true,
                 style: keyStyle(44), child,
@@ -372,6 +371,10 @@ class VibeKeys {
         Main.layoutManager.addChrome(this._panel, {affectsInputRegion: true});
         this._buildGripMenu();
         this._placePanel();
+    }
+
+    _icon(name) {
+        return Gio.icon_new_for_string(`${this._extension.path}/icons/vibekeys-${name}-symbolic.svg`);
     }
 
     _destroyPanel() {

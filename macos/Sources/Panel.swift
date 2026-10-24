@@ -199,7 +199,11 @@ final class PanelController {
     /// For the screenshot in CI: shows the symbol column with "?" highlighted and the mic as recording
     func showDemoState() {
         micButton?.fill = Palette.recording
-        if let backspaceButton { openPopup(above: backspaceButton).highlightIndex(1) }
+        if let backspaceButton {
+            let popup = openPopup(above: backspaceButton)
+            popup.keepOpen = true
+            popup.highlightIndex(1)
+        }
     }
 
     // MARK: Position

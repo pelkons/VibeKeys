@@ -10,6 +10,11 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
+[assembly: System.Reflection.AssemblyTitle("VibeKeys")]
+[assembly: System.Reflection.AssemblyProduct("VibeKeys")]
+[assembly: System.Reflection.AssemblyVersion("0.5.2.0")]
+[assembly: System.Reflection.AssemblyFileVersion("0.5.2.0")]
+
 class VibeKeys : NoActivateForm
 {
     // OpenWhispr dictation hotkey; its button also gets auto-stop on silence (see ToggleDictation)
@@ -111,7 +116,7 @@ class VibeKeys : NoActivateForm
         // Drag handle: left button drags, right button opens a menu (hide to tray / exit)
         var grip = new Label
         {
-            Text = "\uE75F", ForeColor = Color.Gray, Font = iconFont, Cursor = Cursors.SizeAll,
+            Text = "\uE75F", ForeColor = Color.Gray, Font = iconFont,
             TextAlign = ContentAlignment.MiddleCenter, Size = new Size((int)(18 * s), (int)(34 * s)), Margin = gap,
         };
         grip.MouseDown += (o, e) => { if (e.Button == MouseButtons.Left) { dragging = true; dragStart = e.Location; } };

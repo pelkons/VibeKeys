@@ -104,8 +104,6 @@ final class GripView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
-
     override func mouseDown(with event: NSEvent) {
         if event.modifierFlags.contains(.control) { showMenu(event); return }
         guard let window else { return }
