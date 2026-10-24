@@ -1,0 +1,31 @@
+/* Sizes are set from code so they follow the panel scale; colours live here. */
+
+.vibekeys-panel,
+.vibekeys-popup {
+  background-color: rgba(45, 45, 48, 0.97);
+  border: 1px solid rgba(78, 78, 84, 1);
+  color: #ffffff;
+}
+
+.vibekeys-key {
+  background-color: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.vibekeys-key:hover,
+.vibekeys-key.vibekeys-highlight {
+  background-color: #007acc;
+}
+
+.vibekeys-key:active {
+  background-color: #005f9e;
+}
+
+.vibekeys-key.vibekeys-recording {
+  background-color: rgb(32, 92, 150);
+}
+
+.vibekeys-grip {
+  color: rgba(255, 255, 255, 0.35);
+}

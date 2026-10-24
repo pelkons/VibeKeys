@@ -1,0 +1,7 @@
+* text=auto
+*.sh text eol=lf
+*.swift text eol=lf
+*.js text eol=lf
+*.cmd text eol=crlf
+*.png binary
+*.ico binary

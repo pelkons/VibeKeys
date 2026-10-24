@@ -1,0 +1,99 @@
+# Builds all three versions on every push. For a v* tag it also publishes a GitHub release
+# with the Windows exe, the macOS app and the GNOME extension attached.
+name: Build
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        shell: cmd
+        run: windows\build.cmd
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path windows\VibeKeys.exe -DestinationPath VibeKeys-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: VibeKeys-windows.zip
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: bash macos/build.sh
+      - name: Launch and screenshot
+        run: |
+          macos/build/VibeKeys.app/Contents/MacOS/VibeKeys --demo &
+          sleep 6
+          pgrep -x VibeKeys >/dev/null || { echo "VibeKeys exited"; exit 1; }
+          screencapture -x macos-screen.png || echo "screencapture not permitted"
+          pkill -x VibeKeys || true
+      - name: Package
+        run: ditto -c -k --keepParent macos/build/VibeKeys.app VibeKeys-macos.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: VibeKeys-macos.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-screenshot
+          path: macos-screen.png
+          if-no-files-found: ignore
+
+  gnome:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GNOME Shell
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gnome-shell gnome-shell-common zenity dbus-daemon libglib2.0-bin \
+            mesa-utils libgl1-mesa-dri adwaita-icon-theme
+      - name: End-to-end test in headless GNOME Shell
+        run: |
+          export XDG_RUNTIME_DIR=$(mktemp -d)
+          chmod 700 "$XDG_RUNTIME_DIR"
+          dbus-run-session -- bash gnome/test/run-test.sh "$PWD/gnome-test"
+      - name: Package
+        run: cd gnome/vibekeys@pelkons.github.io && zip -r ../../vibekeys@pelkons.github.io.shell-extension.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gnome
+          path: vibekeys@pelkons.github.io.shell-extension.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gnome-test
+          path: gnome-test
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos, gnome]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {name: windows, path: dist}
+      - uses: actions/download-artifact@v4
+        with: {name: macos, path: dist}
+      - uses: actions/download-artifact@v4
+        with: {name: gnome, path: dist}
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "VibeKeys ${GITHUB_REF_NAME#v}" --notes-file .github/release-notes.md

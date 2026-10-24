@@ -1,6 +1,7 @@
 # Draws the VibeKeys icon (a blue keycap with an Enter arrow) and writes a multi-size .ico.
-# Usage: make-icon.ps1 <out.ico> [preview.png]
-param([string]$Out, [string]$Preview)
+# Usage: make-icon.ps1 <out.ico> [preview.png] [-MacPng AppIcon.png]
+#   -MacPng also writes the 1024 px master for macos/build.sh, with the margin macOS icons use.
+param([string]$Out, [string]$Preview, [string]$MacPng)
 Add-Type -AssemblyName System.Drawing
 
 function RoundRect([float]$x, [float]$y, [float]$w, [float]$h, [float]$r) {
@@ -94,6 +95,15 @@ for ($i = 0; $i -lt $sizes.Count; $i++) {
 }
 foreach ($b in $blobs) { $bw.Write([byte[]]$b) }
 $bw.Close()
+
+if ($MacPng) {
+  # macOS icon grid: the tile fills about 824 of 1024 px, centred
+  $mac = New-Object Drawing.Bitmap 1024, 1024, ([Drawing.Imaging.PixelFormat]::Format32bppArgb)
+  $g = [Drawing.Graphics]::FromImage($mac)
+  $g.InterpolationMode = 'HighQualityBicubic'
+  $g.DrawImage((Frame 824), 100, 100, 824, 824)
+  $mac.Save($MacPng, [Drawing.Imaging.ImageFormat]::Png)
+}
 
 if ($Preview) {
   $pv = New-Object Drawing.Bitmap 520, 280

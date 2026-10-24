@@ -1,0 +1,8 @@
+{
+  "uuid": "vibekeys@pelkons.github.io",
+  "name": "VibeKeys",
+  "description": "A small always-on-top panel with Enter, Shift+Enter, Backspace, Esc, undo, screenshot and dictation keys for using the computer with a mouse and voice. The panel never takes focus, so its keys go to the window you are typing in.",
+  "shell-version": ["45", "46", "47", "48"],
+  "url": "https://github.com/pelkons/VibeKeys",
+  "version-name": "0.5.2"
+}
