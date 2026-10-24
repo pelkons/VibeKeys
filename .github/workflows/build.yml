@@ -59,7 +59,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gnome-shell gnome-shell-common zenity dbus-daemon libglib2.0-bin \
-            mesa-utils libgl1-mesa-dri adwaita-icon-theme
+            mesa-utils libgl1-mesa-dri adwaita-icon-theme librsvg2-common
       - name: End-to-end test in headless GNOME Shell
         run: |
           export XDG_RUNTIME_DIR=$(mktemp -d)
