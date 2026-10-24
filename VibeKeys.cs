@@ -40,6 +40,9 @@ class VibeKeys : NoActivateForm
     [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
     [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
+    const int SW_SHOWNOACTIVATE = 4;
     static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOACTIVATE = 0x10;
 
@@ -54,6 +57,12 @@ class VibeKeys : NoActivateForm
     static readonly Color ButtonColor = Color.FromArgb(62, 62, 66), HoverColor = Color.FromArgb(0, 122, 204),
         RecordingColor = Color.FromArgb(32, 92, 150);   // muted blue, calmer than the hover color
 
+    // Panel size choices in the right-click and tray menus, percent of normal
+    static readonly int[] ScaleSteps = { 30, 40, 60, 80, 100, 120, 140, 160, 180, 200 };
+    static readonly string ScaleFile = Path.Combine(SettingsDir, "scale.txt");
+
+    float dpiScale, scale;
+    ToolTip tips;
     Point dragStart;
     bool dragging;
     Button micButton;
@@ -71,14 +80,27 @@ class VibeKeys : NoActivateForm
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Text = "VibeKeys";
 
-        float s;
-        using (var g = CreateGraphics()) s = g.DpiX / 96f;
-        var iconFont = new Font(HasFont("Segoe Fluent Icons") ? "Segoe Fluent Icons" : "Segoe MDL2 Assets", 13f);
-        var textFont = new Font("Segoe UI Semibold", 10.5f);
-        var tips = new ToolTip { ShowAlways = true, InitialDelay = 600 };
-        Padding = new Padding((int)(3 * s));   // breathing room inside the rounded window
-        var gap = new Padding((int)(2 * s));
+        using (var g = CreateGraphics()) dpiScale = g.DpiX / 96f;
+        scale = LoadScale();
+        BuildPanel();
+        FinishSetup();
+    }
 
+    // Creates the row of buttons at the current scale; runs again whenever the scale changes
+    void BuildPanel()
+    {
+        float s = dpiScale * scale;
+        var iconFont = new Font(HasFont("Segoe Fluent Icons") ? "Segoe Fluent Icons" : "Segoe MDL2 Assets", 13f * scale);
+        var textFont = new Font("Segoe UI Semibold", 10.5f * scale);
+        if (tips != null) tips.Dispose();
+        tips = new ToolTip { ShowAlways = true, InitialDelay = 600 };
+        Padding = new Padding((int)(3 * s));   // breathing room inside the rounded window
+        var gap = new Padding(Math.Max(1, (int)(2 * s)));
+
+        var old = new Control[Controls.Count];
+        Controls.CopyTo(old, 0);
+        Controls.Clear();
+        foreach (var c in old) c.Dispose();
         var row = new FlowLayoutPanel
         {
             AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty,
@@ -96,6 +118,7 @@ class VibeKeys : NoActivateForm
         grip.MouseMove += (o, e) => { if (dragging) Location = new Point(Left + e.X - dragStart.X, Top + e.Y - dragStart.Y); };
         grip.MouseUp += (o, e) => { if (dragging) { dragging = false; KeepOnScreen(); SavePosition(); } };
         var menu = new ContextMenuStrip { Font = new Font("Segoe UI", 10f) };
+        menu.Items.Add(MakeScaleMenu());
         menu.Items.Add("Скрыть в трей", null, (o, e) => Hide());
         menu.Items.Add("Выход", null, (o, e) => Close());
         grip.ContextMenuStrip = menu;
@@ -122,13 +145,19 @@ class VibeKeys : NoActivateForm
             else b.Click += (o, e) => Press(keys);
             row.Controls.Add(b);
         }
+        if (watcher != null) micButton.BackColor = micButton.FlatAppearance.MouseOverBackColor = RecordingColor;
+    }
 
+    // Tray icon, position, autostart and the keep-on-top timer: set up once
+    void FinishSetup()
+    {
         Location = LoadPosition();
         Load += (o, e) => KeepOnScreen();
 
         // Tray icon: left click shows/hides the panel, right click opens a menu
         var trayMenu = new ContextMenuStrip { Font = new Font("Segoe UI", 10f) };
         trayMenu.Items.Add("Показать / скрыть панель", null, (o, e) => Toggle());
+        trayMenu.Items.Add(MakeScaleMenu());
         var autostart = new ToolStripMenuItem("Запускать вместе с Windows") { Checked = AutostartWanted(), CheckOnClick = true };
         autostart.CheckedChanged += (o, e) => ApplyAutostart(autostart.Checked);
         trayMenu.Items.Add(autostart);
@@ -141,7 +170,14 @@ class VibeKeys : NoActivateForm
 
         // The taskbar is also topmost and jumps above us when clicked, so keep pushing ourselves back on top
         var raise = new System.Windows.Forms.Timer { Interval = 300 };
-        raise.Tick += (o, e) => { if (Visible && !dragging) SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE); };
+        // "Minimize all" (Win+D, or an agent clearing the screen for computer use) also minimizes us,
+        // which leaves only a small title bar; restore right away without taking focus
+        raise.Tick += (o, e) =>
+        {
+            if (!Visible || dragging) return;
+            if (IsIconic(Handle)) ShowWindow(Handle, SW_SHOWNOACTIVATE);
+            SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        };
         raise.Start();
     }
 
@@ -174,7 +210,7 @@ class VibeKeys : NoActivateForm
             if ((Control.MouseButtons & MouseButtons.Left) == 0) return;   // released already, MouseUp just got lost
             longPressed = true;
             if (popup != null) popup.Close();
-            var p = new SymbolPopup(b, symbols, new Font("Segoe UI Semibold", 14f), BackColor, ButtonColor, HoverColor);
+            var p = new SymbolPopup(b, symbols, new Font("Segoe UI Semibold", 14f * scale), BackColor, ButtonColor, HoverColor);
             p.FormClosed += (o2, e2) => { if (popup == p) popup = null; };
             popup = p;
             p.Show();
@@ -225,6 +261,47 @@ class VibeKeys : NoActivateForm
         catch { }
         var wa = Screen.PrimaryScreen.WorkingArea;
         return new Point(wa.Right - 420, wa.Bottom - 70);
+    }
+
+    // "Масштаб" submenu; ticks are refreshed each time it opens, so the panel and tray copies agree
+    ToolStripMenuItem MakeScaleMenu()
+    {
+        var item = new ToolStripMenuItem("Масштаб");
+        foreach (var p in ScaleSteps)
+        {
+            int percent = p;
+            item.DropDownItems.Add(new ToolStripMenuItem(percent + "%", null, (o, e) => SetScale(percent)) { Tag = percent });
+        }
+        item.DropDownOpening += (o, e) =>
+        {
+            foreach (ToolStripMenuItem i in item.DropDownItems) i.Checked = (int)i.Tag == (int)Math.Round(scale * 100);
+        };
+        return item;
+    }
+
+    void SetScale(int percent)
+    {
+        scale = percent / 100f;
+        if (popup != null) popup.Close();
+        try { Directory.CreateDirectory(SettingsDir); File.WriteAllText(ScaleFile, percent.ToString()); } catch { }
+        // Rebuild after the menu that triggered this has closed: it belongs to a control being replaced
+        // Keeps the bottom edge in place, since the panel usually sits on the taskbar
+        BeginInvoke((Action)(() =>
+        {
+            int bottom = Bottom;
+            BuildPanel();
+            Top = bottom - Height;
+            KeepOnScreen();
+            SavePosition();
+        }));
+    }
+
+    static float LoadScale()
+    {
+        int percent;
+        try { if (int.TryParse(File.ReadAllText(ScaleFile).Trim(), out percent) && Array.IndexOf(ScaleSteps, percent) >= 0) return percent / 100f; }
+        catch { }
+        return 1f;
     }
 
     static bool AutostartWanted()
