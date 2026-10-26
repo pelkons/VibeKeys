@@ -12,8 +12,8 @@ using Microsoft.Win32;
 
 [assembly: System.Reflection.AssemblyTitle("VibeKeys")]
 [assembly: System.Reflection.AssemblyProduct("VibeKeys")]
-[assembly: System.Reflection.AssemblyVersion("0.5.2.0")]
-[assembly: System.Reflection.AssemblyFileVersion("0.5.2.0")]
+[assembly: System.Reflection.AssemblyVersion("0.5.3.0")]
+[assembly: System.Reflection.AssemblyFileVersion("0.5.3.0")]
 
 class VibeKeys : NoActivateForm
 {
