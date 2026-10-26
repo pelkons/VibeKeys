@@ -17,18 +17,19 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {SilenceWatcher} from './silence.js';
 
 // Linux evdev key codes (input-event-codes.h)
-const KEY = {ESC: 1, BACKSPACE: 14, ENTER: 28, LEFTCTRL: 29, Z: 44, LEFTSHIFT: 42, LEFTALT: 56, SYSRQ: 99, LEFTMETA: 125};
+const KEY = {ESC: 1, BACKSPACE: 14, ENTER: 28, LEFTCTRL: 29, Z: 44, LEFTSHIFT: 42, LEFTALT: 56, SPACE: 57, SYSRQ: 99, LEFTMETA: 125};
 
 // ---- Buttons, left to right. Icons are bundled (icons/vibekeys-<id>-symbolic.svg) so they look
 // the same whatever icon theme is installed. ----
 const BUTTONS = [
     {id: 'mic', kind: 'dictation'},
     {id: 'confirm', keys: [KEY.LEFTCTRL, KEY.ENTER]},
-    {id: 'enter', keys: [KEY.ENTER]},
     {id: 'newline', keys: [KEY.LEFTSHIFT, KEY.ENTER]},
     {id: 'undo', keys: [KEY.LEFTCTRL, KEY.Z]},
     {id: 'esc', text: 'Esc', keys: [KEY.ESC]},
     {id: 'screenshot', keys: [KEY.SYSRQ]},
+    {id: 'space', keys: [KEY.SPACE]},
+    {id: 'enter', keys: [KEY.ENTER]},
     {id: 'backspace', keys: [KEY.BACKSPACE], kind: 'backspace'},
 ];
 

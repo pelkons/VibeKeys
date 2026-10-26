@@ -31,15 +31,16 @@ class VibeKeys : NoActivateForm
     {
         new object[] { "\uE720",       "Диктовка OpenWhispr (Win+Alt)", DictationKeys },
         new object[] { "\uE8FB",       "Подтвердить (Ctrl+Enter)",   new byte[] { VK_CONTROL, VK_RETURN } },
-        new object[] { "\uE751",       "Enter",                      new byte[] { VK_RETURN } },
         new object[] { "\uE8E4",       "Новая строка (Shift+Enter)", new byte[] { VK_SHIFT, VK_RETURN } },
         new object[] { "\uE7A7",       "Отменить (Ctrl+Z)",          new byte[] { VK_CONTROL, (byte)'Z' } },
         new object[] { "Esc",          "Escape",                     new byte[] { VK_ESCAPE } },
         new object[] { "\uE924",       "Скриншот области (Win+Shift+S)", new byte[] { VK_LWIN, VK_SHIFT, (byte)'S' } },
+        new object[] { "\uE75D",       "Пробел",                     new byte[] { VK_SPACE } },
+        new object[] { "\uE751",       "Enter",                      new byte[] { VK_RETURN } },
         new object[] { "\uE750",       "Стереть (Backspace)",        new byte[] { VK_BACK } },
     };
 
-    const byte VK_BACK = 0x08, VK_RETURN = 0x0D, VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_ESCAPE = 0x1B, VK_LWIN = 0x5B;
+    const byte VK_BACK = 0x08, VK_RETURN = 0x0D, VK_SPACE = 0x20, VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_ESCAPE = 0x1B, VK_LWIN = 0x5B;
     const uint KEYEVENTF_KEYUP = 0x2;
 
     [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
@@ -58,6 +59,9 @@ class VibeKeys : NoActivateForm
     // Autostart is on unless the user turned it off in the tray menu (remembered in autostart.txt)
     static readonly string AutostartFile = Path.Combine(SettingsDir, "autostart.txt");
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    const string StartupApprovedKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+    static readonly string StartupShortcut = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.Startup), "VibeKeys.lnk");
 
     static readonly Color ButtonColor = Color.FromArgb(62, 62, 66), HoverColor = Color.FromArgb(0, 122, 204),
         RecordingColor = Color.FromArgb(32, 92, 150);   // muted blue, calmer than the hover color
@@ -315,7 +319,10 @@ class VibeKeys : NoActivateForm
         catch { return true; }   // never chosen: on by default
     }
 
-    // Adds or removes VibeKeys in the current user's Run key and remembers the choice
+    // Adds or removes VibeKeys at login and remembers the choice. Two independent routes, because Windows
+    // once skipped the Run entry at login for no logged reason: the Run key (marked as approved, the way the
+    // Startup apps settings page does it) and a shortcut in the Startup folder. The single-instance mutex
+    // keeps the second one from opening another panel.
     static void ApplyAutostart(bool on)
     {
         try
@@ -325,10 +332,45 @@ class VibeKeys : NoActivateForm
                 if (on) key.SetValue("VibeKeys", "\"" + Application.ExecutablePath + "\"");
                 else key.DeleteValue("VibeKeys", false);
             }
+            if (on)
+            {
+                using (var approved = Registry.CurrentUser.CreateSubKey(StartupApprovedKey))
+                    if (approved.GetValue("VibeKeys") == null)
+                        approved.SetValue("VibeKeys", new byte[] { 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, RegistryValueKind.Binary);
+            }
+        }
+        catch { }
+
+        try
+        {
+            if (on) CreateShortcut(StartupShortcut, Application.ExecutablePath);
+            else if (File.Exists(StartupShortcut)) File.Delete(StartupShortcut);
+        }
+        catch { }
+
+        try
+        {
             Directory.CreateDirectory(SettingsDir);
             File.WriteAllText(AutostartFile, on ? "on" : "off");
         }
         catch { }
+    }
+
+    // Writes a .lnk through the Windows Script Host shell object (no extra references needed)
+    static void CreateShortcut(string path, string target)
+    {
+        var shellType = Type.GetTypeFromProgID("WScript.Shell");
+        object shell = Activator.CreateInstance(shellType);
+        try
+        {
+            object link = shellType.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { path });
+            var linkType = link.GetType();
+            linkType.InvokeMember("TargetPath", System.Reflection.BindingFlags.SetProperty, null, link, new object[] { target });
+            linkType.InvokeMember("WorkingDirectory", System.Reflection.BindingFlags.SetProperty, null, link, new object[] { Path.GetDirectoryName(target) });
+            linkType.InvokeMember("Save", System.Reflection.BindingFlags.InvokeMethod, null, link, null);
+            Marshal.FinalReleaseComObject(link);
+        }
+        finally { Marshal.FinalReleaseComObject(shell); }
     }
 
     // Pulls the whole panel back inside its screen (a saved spot can be off by a few pixels after a resize)

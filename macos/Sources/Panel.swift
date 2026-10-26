@@ -55,11 +55,12 @@ final class PanelController {
     static let keys: [Key] = [
         Key(symbol: "mic", "Диктовка OpenWhispr", [], .dictation),
         Key(symbol: "checkmark", "Подтвердить (Cmd+Enter)", [kVK_Command, kVK_Return]),
-        Key(symbol: "return", "Enter", [kVK_Return]),
         Key(symbol: "text.alignleft", "Новая строка (Shift+Enter)", [kVK_Shift, kVK_Return]),
         Key(symbol: "arrow.uturn.backward", "Отменить (Cmd+Z)", [kVK_Command, kVK_ANSI_Z]),
         Key(text: "esc", "Escape", [kVK_Escape]),
         Key(symbol: "camera.viewfinder", "Скриншот области (Cmd+Shift+4)", [kVK_Command, kVK_Shift, kVK_ANSI_4]),
+        Key(symbol: "space", "Пробел", [kVK_Space]),
+        Key(symbol: "return", "Enter", [kVK_Return]),
         Key(symbol: "delete.left", "Стереть (Backspace); подержать — знаки", [kVK_Delete], .backspace),
     ]
 
