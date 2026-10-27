@@ -12,8 +12,8 @@ using Microsoft.Win32;
 
 [assembly: System.Reflection.AssemblyTitle("VibeKeys")]
 [assembly: System.Reflection.AssemblyProduct("VibeKeys")]
-[assembly: System.Reflection.AssemblyVersion("0.5.3.0")]
-[assembly: System.Reflection.AssemblyFileVersion("0.5.3.0")]
+[assembly: System.Reflection.AssemblyVersion("0.5.4.0")]
+[assembly: System.Reflection.AssemblyFileVersion("0.5.4.0")]
 
 class VibeKeys : NoActivateForm
 {
@@ -21,9 +21,11 @@ class VibeKeys : NoActivateForm
     static readonly byte[] DictationKeys = { VK_LWIN, VK_MENU };
     const int SilenceMs = 2000, NoSpeechMs = 8000;
 
-    // Long press on Backspace pops up these characters, first one closest to the button
-    const string BackspaceSymbols = ".?,!";
+    // Long press on Space pops up these characters, first one closest to the button
+    const string SpaceSymbols = ".?,!";
     const int LongPressMs = 450;
+    // Holding Backspace repeats it like a real keyboard: first repeat after RepeatDelayMs, then every RepeatMs
+    const int RepeatDelayMs = 450, RepeatMs = 35;
 
     // ---- Buttons: label, hover hint, keys pressed together (modifiers first). Edit this list to change the panel. ----
     // Labels made of \uE000+ characters are drawn with the Windows icon font (Segoe Fluent Icons), others as plain text.
@@ -35,9 +37,9 @@ class VibeKeys : NoActivateForm
         new object[] { "\uE7A7",       "Отменить (Ctrl+Z)",          new byte[] { VK_CONTROL, (byte)'Z' } },
         new object[] { "Esc",          "Escape",                     new byte[] { VK_ESCAPE } },
         new object[] { "\uE924",       "Скриншот области (Win+Shift+S)", new byte[] { VK_LWIN, VK_SHIFT, (byte)'S' } },
-        new object[] { "\uE75D",       "Пробел",                     new byte[] { VK_SPACE } },
+        new object[] { "\uE75D",       "Пробел; подержать — знаки",   new byte[] { VK_SPACE } },
         new object[] { "\uE751",       "Enter",                      new byte[] { VK_RETURN } },
-        new object[] { "\uE750",       "Стереть (Backspace)",        new byte[] { VK_BACK } },
+        new object[] { "\uE750",       "Стереть (Backspace); подержать — стирать подряд", new byte[] { VK_BACK } },
     };
 
     const byte VK_BACK = 0x08, VK_RETURN = 0x0D, VK_SPACE = 0x20, VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_ESCAPE = 0x1B, VK_LWIN = 0x5B;
@@ -150,7 +152,8 @@ class VibeKeys : NoActivateForm
             tips.SetToolTip(b, (string)k[1]);
             b.FlatAppearance.MouseOverBackColor = HoverColor;
             if (keys == DictationKeys) { micButton = b; b.Click += (o, e) => ToggleDictation(); }
-            else if (keys.Length == 1 && keys[0] == VK_BACK) AttachSymbolPopup(b, keys, BackspaceSymbols);
+            else if (keys.Length == 1 && keys[0] == VK_SPACE) AttachSymbolPopup(b, keys, SpaceSymbols);
+            else if (keys.Length == 1 && keys[0] == VK_BACK) AttachAutoRepeat(b, keys);
             else b.Click += (o, e) => Press(keys);
             row.Controls.Add(b);
         }
@@ -230,6 +233,27 @@ class VibeKeys : NoActivateForm
         b.Click += (o, e) => { if (!longPressed) Press(keys); };
     }
 
+    // Presses the key on mouse down and, while the button is held, keeps repeating it like a held keyboard key
+    void AttachAutoRepeat(Button b, byte[] keys)
+    {
+        var repeat = new System.Windows.Forms.Timer();
+        repeat.Tick += (o, e) =>
+        {
+            // The button state is checked directly: a MouseUp outside the panel can get lost
+            if ((Control.MouseButtons & MouseButtons.Left) == 0) { repeat.Stop(); return; }
+            repeat.Interval = RepeatMs;
+            Press(keys, 0);
+        };
+        b.MouseDown += (o, e) =>
+        {
+            if (e.Button != MouseButtons.Left) return;
+            Press(keys, 0);
+            repeat.Interval = RepeatDelayMs;
+            repeat.Start();
+        };
+        b.MouseUp += (o, e) => repeat.Stop();
+    }
+
     void StopWatching()
     {
         watcher.Dispose();
@@ -251,10 +275,11 @@ class VibeKeys : NoActivateForm
         return false;
     }
 
-    static void Press(byte[] keys)
+    // holdMs: brief hold so global-hotkey listeners (OpenWhispr) see the combo; 0 for fast repeats
+    static void Press(byte[] keys, int holdMs = 50)
     {
         foreach (var k in keys) keybd_event(k, 0, 0, UIntPtr.Zero);
-        Thread.Sleep(50);   // brief hold so global-hotkey listeners (OpenWhispr) see the combo
+        if (holdMs > 0) Thread.Sleep(holdMs);
         for (int i = keys.Length - 1; i >= 0; i--) keybd_event(keys[i], 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
     }
 

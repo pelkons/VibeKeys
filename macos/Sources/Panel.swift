@@ -38,7 +38,8 @@ final class KeyPanel: NSPanel {
 }
 
 final class PanelController {
-    enum Kind { case plain, dictation, backspace }
+    /// symbols: long press opens the symbol column; repeating: held down, the key repeats like a keyboard key
+    enum Kind { case plain, dictation, symbols, repeating }
 
     struct Key {
         let symbol: String?
@@ -59,14 +60,16 @@ final class PanelController {
         Key(symbol: "arrow.uturn.backward", "Отменить (Cmd+Z)", [kVK_Command, kVK_ANSI_Z]),
         Key(text: "esc", "Escape", [kVK_Escape]),
         Key(symbol: "camera.viewfinder", "Скриншот области (Cmd+Shift+4)", [kVK_Command, kVK_Shift, kVK_ANSI_4]),
-        Key(symbol: "space", "Пробел", [kVK_Space]),
+        Key(symbol: "space", "Пробел; подержать — знаки", [kVK_Space], .symbols),
         Key(symbol: "return", "Enter", [kVK_Return]),
-        Key(symbol: "delete.left", "Стереть (Backspace); подержать — знаки", [kVK_Delete], .backspace),
+        Key(symbol: "delete.left", "Стереть (Backspace); подержать — стирать подряд", [kVK_Delete], .repeating),
     ]
 
-    /// Long press on Backspace pops up these characters, first one closest to the button
-    static let backspaceSymbols = ".?,!"
+    /// Long press on Space pops up these characters, first one closest to the button
+    static let spaceSymbols = ".?,!"
     static let longPress: TimeInterval = 0.45
+    /// Held Backspace: first repeat after repeatDelay, then every repeatInterval
+    static let repeatDelay: TimeInterval = 0.45, repeatInterval: TimeInterval = 0.035
     static let silenceMs = 2000, noSpeechMs = 8000
 
     let panel = KeyPanel(contentRect: NSRect(x: 0, y: 0, width: 100, height: 40))
@@ -74,7 +77,7 @@ final class PanelController {
     var menuProvider: (() -> NSMenu)?
 
     private var micButton: KeyButton?
-    private var backspaceButton: KeyButton?
+    private var symbolsButton: KeyButton?
     private var watcher: SilenceWatcher?
     private var popup: SymbolPopup?
 
@@ -124,12 +127,18 @@ final class PanelController {
                 micButton = button
                 button.onPress = { [weak self] in self?.toggleDictation() }
                 if watcher != nil { button.fill = Palette.recording; button.hoverFill = Palette.recording }
-            case .backspace:
-                backspaceButton = button
+            case .symbols:
+                symbolsButton = button
                 let codes = key.keys.map { CGKeyCode($0) }
                 button.onMouseDown = { [weak self, weak button] event in
                     guard let self, let button else { return }
-                    self.trackBackspace(button, event: event, keys: codes)
+                    self.trackSymbols(button, event: event, keys: codes)
+                }
+            case .repeating:
+                let codes = key.keys.map { CGKeyCode($0) }
+                button.onMouseDown = { [weak button] _ in
+                    guard let button else { return }
+                    Self.trackRepeat(button, keys: codes)
                 }
             }
             background.addSubview(button)
@@ -166,12 +175,27 @@ final class PanelController {
         micButton?.hoverFill = Palette.hover
     }
 
-    // MARK: Backspace: click deletes, long press opens the symbol column
+    // MARK: Backspace: held down, it keeps deleting
 
-    private func trackBackspace(_ button: KeyButton, event: NSEvent, keys: [CGKeyCode]) {
+    /// Presses the key on mouse down and keeps repeating it while the button is held, like a keyboard key
+    private static func trackRepeat(_ button: KeyButton, keys: [CGKeyCode]) {
         guard let window = button.window else { return }
         button.pressed = true
-        // Released before the long-press delay: a plain Backspace
+        Keyboard.press(keys, hold: false)
+        var deadline = Date(timeIntervalSinceNow: repeatDelay)
+        while window.nextEvent(matching: [.leftMouseUp], until: deadline, inMode: .eventTracking, dequeue: true) == nil {
+            Keyboard.press(keys, hold: false)
+            deadline = Date(timeIntervalSinceNow: repeatInterval)
+        }
+        button.pressed = false
+    }
+
+    // MARK: Space: click types a space, long press opens the symbol column
+
+    private func trackSymbols(_ button: KeyButton, event: NSEvent, keys: [CGKeyCode]) {
+        guard let window = button.window else { return }
+        button.pressed = true
+        // Released before the long-press delay: a plain key press
         if let early = window.nextEvent(matching: [.leftMouseUp], until: Date(timeIntervalSinceNow: Self.longPress),
                                         inMode: .eventTracking, dequeue: true) {
             button.pressed = false
@@ -191,7 +215,7 @@ final class PanelController {
     @discardableResult
     func openPopup(above button: KeyButton) -> SymbolPopup {
         popup?.close()
-        let popup = SymbolPopup(above: button, symbols: Self.backspaceSymbols, scale: scale)
+        let popup = SymbolPopup(above: button, symbols: Self.spaceSymbols, scale: scale)
         popup.onClose = { [weak self, weak popup] in if self?.popup === popup { self?.popup = nil } }
         self.popup = popup
         return popup
@@ -200,8 +224,8 @@ final class PanelController {
     /// For the screenshot in CI: shows the symbol column with "?" highlighted and the mic as recording
     func showDemoState() {
         micButton?.fill = Palette.recording
-        if let backspaceButton {
-            let popup = openPopup(above: backspaceButton)
+        if let symbolsButton {
+            let popup = openPopup(above: symbolsButton)
             popup.keepOpen = true
             popup.highlightIndex(1)
         }

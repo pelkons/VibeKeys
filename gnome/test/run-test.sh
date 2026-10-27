@@ -1,7 +1,8 @@
 #!/bin/bash
 # End-to-end check of the GNOME extension in a headless GNOME Shell (used by CI; run it inside
 # `dbus-run-session`). Types "abc" into a zenity entry, clicks the panel's Backspace with a virtual
-# mouse, long-presses Backspace and slides onto "?", clicks Enter, and expects zenity to print "ab?".
+# mouse, long-presses Space and slides onto "?", clicks Enter, and expects zenity to print "ab?".
+# Then, in a second entry, holds Backspace to wipe "xyz" and expects "ok" after typing it.
 # That only works if clicking the panel leaves the keyboard focus in the zenity window.
 # Usage: run-test.sh [output-dir]   (screenshots and logs go there)
 set -euo pipefail
@@ -55,7 +56,7 @@ call Screenshot "$OUT/1-start.png"; sleep 1
 call TypeText abc; sleep 0.5
 click backspace                                     # "abc" -> "ab"
 
-read -r x y <<<"$(center backspace)"                # long press, slide onto "?", release
+read -r x y <<<"$(center space)"                    # long press Space, slide onto "?", release
 call PointerMove "$x" "$y"; sleep 0.2
 call PointerButton true; sleep 0.9
 read -r px py <<<"$(center popup:1)"
@@ -67,11 +68,30 @@ call Screenshot "$OUT/3-typed.png"; sleep 1
 click enter                                         # zenity prints the entry and exits
 timeout 10 tail --pid=$ZENITY_PID -f /dev/null || true
 
-result=$(cat "$OUT/zenity.txt")
-echo "zenity printed: '$result'"
-if [ "$result" != "ab?" ]; then
-  echo "FAIL: expected 'ab?'"
+fail() {
+  echo "FAIL: $1"
   grep -i -E "vibekeys|error|exception" "$OUT/shell.log" | tail -40 || true
   exit 1
-fi
+}
+
+result=$(cat "$OUT/zenity.txt")
+echo "zenity printed: '$result'"
+[ "$result" = "ab?" ] || fail "expected 'ab?'"
+
+# Held Backspace repeats: "xyz" is wiped out by one long hold, so the entry ends up as just "ok"
+zenity --entry --title "VibeKeys test 2" --text "Type here" >"$OUT/zenity2.txt" 2>>"$OUT/zenity.log" &
+ZENITY_PID=$!
+sleep 3
+call TypeText xyz; sleep 0.5
+read -r x y <<<"$(center backspace)"
+call PointerMove "$x" "$y"; sleep 0.2
+call PointerButton true; sleep 1.5
+call PointerButton false; sleep 0.5
+call TypeText ok; sleep 0.5
+click enter
+timeout 10 tail --pid=$ZENITY_PID -f /dev/null || true
+
+result=$(cat "$OUT/zenity2.txt")
+echo "zenity printed: '$result'"
+[ "$result" = "ok" ] || fail "expected 'ok' (held Backspace should delete all of 'xyz')"
 echo "PASS"

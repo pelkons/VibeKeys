@@ -1,5 +1,7 @@
-# Checks the Backspace button in a fresh Notepad window: a short click deletes one character, and a
-# long press opens the symbol column; sliding onto the second symbol and releasing types it.
+# Checks the Space and Backspace buttons in a fresh Notepad window:
+#   a short click on Backspace deletes one character;
+#   a long press on Space opens the symbol column, and sliding onto the second symbol types it;
+#   holding Backspace keeps deleting, like a held keyboard key.
 # Usage: popuptest.ps1 <popup.png>   (VibeKeys must be running; moves the mouse)
 # Stops before clicking anything if the new Notepad window is not in front.
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing, System.Windows.Forms
@@ -27,28 +29,42 @@ $doc = $A::FromHandle($h).FindFirst('Descendants', (New-Object $C($A::ControlTyp
 function Text { $doc.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern).DocumentRange.GetText(-1) }
 function InFront { if ([M]::GetForegroundWindow() -ne $h) { "Notepad lost focus, stopping"; exit 1 } }
 
-[System.Windows.Forms.SendKeys]::SendWait("abc"); Start-Sleep 0.5
-"Typed:            [" + (Text) + "]"
-
 $vk = $root.FindFirst('Children', (New-Object $C($A::NameProperty, 'VibeKeys')))
-$r = $vk.FindFirst('Descendants', (New-Object $C($A::NameProperty, [string][char]0xE750))).Current.BoundingRectangle
-$x = [int]($r.X + $r.Width / 2); $y = [int]($r.Y + $r.Height / 2)
+function Center($glyph) {
+  $r = $vk.FindFirst('Descendants', (New-Object $C($A::NameProperty, [string][char]$glyph))).Current.BoundingRectangle
+  return @([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2), $r.Height)
+}
+$bs = Center 0xE750
+$sp = Center 0xE75D
+
+[System.Windows.Forms.SendKeys]::SendWait("abc"); Start-Sleep 0.5
+"Typed:             [" + (Text) + "]"
 
 InFront
-[M]::SetCursorPos($x, $y) | Out-Null
+[M]::SetCursorPos($bs[0], $bs[1]) | Out-Null; Start-Sleep 0.2
 [M]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 80; [M]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
 Start-Sleep 0.8
-"After short click: [" + (Text) + "]   (expected ab)"
+"Backspace click:   [" + (Text) + "]   (expected ab)"
 
 InFront
+[M]::SetCursorPos($sp[0], $sp[1]) | Out-Null; Start-Sleep 0.2
 [M]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
 Start-Sleep 0.8
-[M]::SetCursorPos($x, [int]($y - 2 * ($r.Height + 2))) | Out-Null
-Start-Sleep 0.3
+[M]::SetCursorPos($sp[0], [int]($sp[1] - 2 * ($sp[2] + 4))) | Out-Null
+Start-Sleep 0.4
 # Screenshot while still holding: the symbol under the cursor should be highlighted
 $bmp = New-Object Drawing.Bitmap 300, 500
-[Drawing.Graphics]::FromImage($bmp).CopyFromScreen($x - 150, $y - 450, 0, 0, $bmp.Size)
+[Drawing.Graphics]::FromImage($bmp).CopyFromScreen($sp[0] - 150, $sp[1] - 450, 0, 0, $bmp.Size)
 $bmp.Save($args[0])
 [M]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
 Start-Sleep 0.8
-"After long press:  [" + (Text) + "]   (expected ab?)"
+"Space long press:  [" + (Text) + "]   (expected ab?)"
+
+[System.Windows.Forms.SendKeys]::SendWait("defghij"); Start-Sleep 0.5
+InFront
+[M]::SetCursorPos($bs[0], $bs[1]) | Out-Null; Start-Sleep 0.2
+[M]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
+Start-Sleep 1.5
+[M]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+Start-Sleep 0.5
+"Backspace held:    [" + (Text) + "]   (expected empty: ab?defghij all deleted)"

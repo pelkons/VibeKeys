@@ -28,9 +28,9 @@ const BUTTONS = [
     {id: 'undo', keys: [KEY.LEFTCTRL, KEY.Z]},
     {id: 'esc', text: 'Esc', keys: [KEY.ESC]},
     {id: 'screenshot', keys: [KEY.SYSRQ]},
-    {id: 'space', keys: [KEY.SPACE]},
+    {id: 'space', keys: [KEY.SPACE], kind: 'symbols'},
     {id: 'enter', keys: [KEY.ENTER]},
-    {id: 'backspace', keys: [KEY.BACKSPACE], kind: 'backspace'},
+    {id: 'backspace', keys: [KEY.BACKSPACE], kind: 'repeat'},
 ];
 
 // Hotkey that starts and stops OpenWhispr dictation; pick the one set in OpenWhispr.
@@ -41,8 +41,9 @@ const DICTATION_HOTKEYS = {
 };
 
 const SCALE_STEPS = [30, 40, 60, 80, 100, 120, 140, 160, 180, 200];
-const BACKSPACE_SYMBOLS = '.?,!';   // long press on Backspace; first one closest to the button
+const SPACE_SYMBOLS = '.?,!';       // long press on Space; first one closest to the button
 const LONG_PRESS_MS = 450;
+const REPEAT_DELAY_MS = 450, REPEAT_MS = 35;   // held Backspace repeats like a keyboard key
 const POPUP_CLOSE_MS = 1500;        // popup closes once the mouse has been away this long
 const SILENCE_MS = 2000, NO_SPEECH_MS = 8000;
 
@@ -272,16 +273,20 @@ class VibeKeys {
     // ---- Keys ----
 
     // Presses keys together (modifiers first), holds them briefly so global-hotkey listeners such as
-    // OpenWhispr see the combo, then releases them in reverse order.
-    press(keys) {
+    // OpenWhispr see the combo, then releases them in reverse order. holdMs 0 releases at once (fast repeats).
+    press(keys, holdMs = 50) {
         const time = GLib.get_monotonic_time();
         for (const key of keys)
             this._keyboard.notify_key(time, key, Clutter.KeyState.PRESSED);
-        this._later(50, () => {
+        const release = () => {
             const later = GLib.get_monotonic_time();
             for (const key of [...keys].reverse())
                 this._keyboard?.notify_key(later, key, Clutter.KeyState.RELEASED);
-        });
+        };
+        if (holdMs > 0)
+            this._later(holdMs, release);
+        else
+            release();
     }
 
     // Types characters by key symbol; the shell adds Shift where the current layout needs it
@@ -355,11 +360,14 @@ class VibeKeys {
                 button.connect('clicked', () => this.toggleDictation());
                 if (this._watcher)
                     button.add_style_class_name('vibekeys-recording');
-            } else if (def.kind === 'backspace') {
+            } else if (def.kind === 'symbols' || def.kind === 'repeat') {
                 button.connect('button-press-event', (_actor, event) => {
                     if (event.get_button() !== Clutter.BUTTON_PRIMARY)
                         return Clutter.EVENT_PROPAGATE;
-                    this._backspacePressed(button, def.keys);
+                    if (def.kind === 'symbols')
+                        this._symbolsPressed(button, def.keys);
+                    else
+                        this._repeatPressed(button, def.keys);
                     return Clutter.EVENT_STOP;
                 });
             } else {
@@ -521,9 +529,30 @@ class VibeKeys {
         this.buttons?.mic?.remove_style_class_name('vibekeys-recording');
     }
 
-    // ---- Backspace: click deletes, long press opens the symbol column ----
+    // ---- Backspace: presses at once and, while held, keeps repeating like a keyboard key ----
 
-    _backspacePressed(button, keys) {
+    _repeatPressed(button, keys) {
+        button.add_style_pseudo_class('active');
+        this.press(keys, 0);
+        let next = GLib.get_monotonic_time() + REPEAT_DELAY_MS * 1000;
+        const id = trackPrimaryButton(
+            () => {
+                const now = GLib.get_monotonic_time();
+                if (now >= next) {
+                    this.press(keys, 0);
+                    next = now + REPEAT_MS * 1000;
+                }
+            },
+            () => {
+                this._sources.delete(id);
+                button.remove_style_pseudo_class('active');
+            });
+        this._sources.add(id);
+    }
+
+    // ---- Space: click types a space, long press opens the symbol column ----
+
+    _symbolsPressed(button, keys) {
         button.add_style_pseudo_class('active');
         let opened = false;
         const hold = this._later(LONG_PRESS_MS, () => {
@@ -551,7 +580,7 @@ class VibeKeys {
 
     _openPopup(button) {
         this._popup?.close();
-        this._popup = new SymbolPopup(this, button, BACKSPACE_SYMBOLS, this.settings.scale / 100);
+        this._popup = new SymbolPopup(this, button, SPACE_SYMBOLS, this.settings.scale / 100);
         return this._popup;
     }
 

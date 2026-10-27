@@ -33,14 +33,15 @@ enum Keyboard {
 
     /// Presses keys together (modifiers first), holds them briefly so global-hotkey listeners
     /// such as OpenWhispr see the combo, then releases them in reverse order.
-    static func press(_ keys: [CGKeyCode]) {
+    /// hold: false skips the pause, for fast repeats.
+    static func press(_ keys: [CGKeyCode], hold: Bool = true) {
         let source = CGEventSource(stateID: .hidSystemState)
         var flags: CGEventFlags = []
         for key in keys {
             if let flag = modifierFlag(key) { flags.insert(flag) }
             post(source, key, down: true, flags: flags)
         }
-        usleep(50_000)
+        if hold { usleep(50_000) }
         for key in keys.reversed() {
             if let flag = modifierFlag(key) { flags.remove(flag) }
             post(source, key, down: false, flags: flags)
